@@ -1,0 +1,6 @@
+{
+  "name": "Lottie Fullscreen Previewer",
+  "description": "Công cụ xem và kiểm tra tệp *.lottie và JSON Lottie toàn màn hình với đầy đủ trình điều khiển, tùy chỉnh màu nền, điều chỉnh tốc độ, phân tích layer và xuất định dạng.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
