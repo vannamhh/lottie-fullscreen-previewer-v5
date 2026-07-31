@@ -1,7 +1,10 @@
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { DotLottieReact, DotLottie } from '@lottiefiles/dotlottie-react';
 import { ViewSettings, PlaybackState } from '../types';
 import { getFilterCssString } from '../utils/cssFilterUtils';
+import { getRenderPixelRatio } from '../utils/canvasScale';
+
+const RESIZE_DEBOUNCE_MS = 120;
 
 interface LottieCanvasProps {
   src: string | null;
@@ -32,6 +35,49 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
   const dotLottieRef = useRef<DotLottie | null>(null);
+  const resizeTimerRef = useRef<number | undefined>(undefined);
+
+  // 'token' forces the re-render effect to run even when the ratio itself is
+  // unchanged — a zoom from 1.0 to 1.15 needs a re-raster just the same.
+  const [renderScale, setRenderScale] = useState<{ ratio: number; token: number }>(() => ({
+    ratio: typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1,
+    token: 0
+  }));
+
+  const renderConfig = useMemo(
+    () => ({ autoResize: true, devicePixelRatio: renderScale.ratio }),
+    [renderScale.ratio]
+  );
+
+  // Recompute the pixel budget once the zoom settles. Doing it on every wheel
+  // tick would reallocate a multi-megapixel render target per frame.
+  useEffect(() => {
+    const schedule = () => {
+      window.clearTimeout(resizeTimerRef.current);
+      resizeTimerRef.current = window.setTimeout(() => {
+        const canvas = containerRef.current?.querySelector('canvas');
+        if (!canvas) return;
+        setRenderScale(prev => ({
+          ratio: getRenderPixelRatio(canvas.clientWidth, canvas.clientHeight, viewSettings.zoom),
+          token: prev.token + 1
+        }));
+      }, RESIZE_DEBOUNCE_MS);
+    };
+
+    schedule();
+    window.addEventListener('resize', schedule);
+    return () => {
+      window.removeEventListener('resize', schedule);
+      window.clearTimeout(resizeTimerRef.current);
+    };
+  }, [viewSettings.zoom, viewSettings.fitMode]);
+
+  // Effects run child-first, so DotLottieReact has already pushed the new
+  // devicePixelRatio through setRenderConfig by the time this runs; resize() is
+  // what actually rebuilds the backing store and redraws.
+  useEffect(() => {
+    dotLottieRef.current?.resize();
+  }, [renderScale]);
 
   // Handle dotLottie instance reference callback
   const handleDotLottieRef = useCallback((instance: DotLottie | null) => {
@@ -253,6 +299,7 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
             loop={playbackState.loop}
             autoplay={playbackState.isPlaying}
             speed={playbackState.speed}
+            renderConfig={renderConfig}
             dotLottieRefCallback={handleDotLottieRef}
             onError={() => onLoadError('Không thể tải tệp Lottie từ nguồn này.')}
             className="w-full h-full object-contain pointer-events-none"
@@ -263,6 +310,7 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
             loop={playbackState.loop}
             autoplay={playbackState.isPlaying}
             speed={playbackState.speed}
+            renderConfig={renderConfig}
             dotLottieRefCallback={handleDotLottieRef}
             onError={() => onLoadError('Lỗi dữ liệu JSON Lottie không hợp lệ.')}
             className="w-full h-full object-contain pointer-events-none"
