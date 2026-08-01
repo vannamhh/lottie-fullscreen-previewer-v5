@@ -84,8 +84,40 @@ fn files_from_args() -> Vec<PathBuf> {
         .collect()
 }
 
+/// Pulls every supported file out of an argv vector and hands it to the webview.
+/// Windows and Linux deliver a double-clicked file this way rather than through
+/// `RunEvent::Opened`.
+#[cfg(any(windows, target_os = "linux"))]
+fn deliver_from_argv(app: &tauri::AppHandle, argv: &[String]) {
+    for path in argv.iter().skip(1).map(PathBuf::from) {
+        if !path.is_file() || !is_supported(&path) {
+            continue;
+        }
+        if let Some(file) = read_opened_file(&path) {
+            deliver(app, file);
+        }
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_focus();
+    }
+}
+
 pub fn run() {
-    tauri::Builder::default()
+    #[allow(unused_mut)]
+    let mut builder = tauri::Builder::default();
+
+    // On Windows and Linux, opening a second file launches a whole new process.
+    // Single-instance forwards that process's argv to the running app and exits,
+    // which is what makes a warm open land in the existing window. macOS has no
+    // such problem — the OS routes the file to the running app itself.
+    #[cfg(any(windows, target_os = "linux"))]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            deliver_from_argv(app, &argv);
+        }));
+    }
+
+    builder
         .manage(OpenQueue::default())
         .invoke_handler(tauri::generate_handler![take_pending_files])
         .setup(|app| {
@@ -98,20 +130,28 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("failed to build the Tauri application")
-        .run(|app, event| {
-            // macOS delivers Finder double-clicks and "Open With" here, both on
-            // cold start and while the app is already running.
-            if let tauri::RunEvent::Opened { urls } = event {
-                for url in urls {
-                    if let Ok(path) = url.to_file_path() {
-                        if let Some(file) = read_opened_file(&path) {
-                            deliver(app, file);
-                        }
-                    }
-                }
-                if let Some(window) = app.get_webview_window("main") {
-                    let _ = window.set_focus();
-                }
-            }
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            handle_macos_open(_app, _event);
         });
+}
+
+/// macOS delivers Finder double-clicks and "Open With" through the run loop,
+/// both on cold start and while the app is already running. Windows and Linux
+/// have no equivalent — they go through argv, see `deliver_from_argv`.
+#[cfg(target_os = "macos")]
+fn handle_macos_open(app: &tauri::AppHandle, event: tauri::RunEvent) {
+    let tauri::RunEvent::Opened { urls } = event else {
+        return;
+    };
+    for url in urls {
+        if let Ok(path) = url.to_file_path() {
+            if let Some(file) = read_opened_file(&path) {
+                deliver(app, file);
+            }
+        }
+    }
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_focus();
+    }
 }

@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Lottie Previewer",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "identifier": "com.hoangnam.lottie-previewer",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -31,7 +31,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["app", "dmg"],
+    "targets": "all",
     "category": "GraphicsAndDesign",
     "shortDescription": "Fullscreen Lottie and dotLottie previewer",
     "longDescription": "Preview .lottie and Lottie JSON animations fullscreen with playback controls, layer inspection and export tools.",
@@ -47,23 +47,19 @@
     },
     "fileAssociations": [
       {
-        "ext": ["lottie"],
+        "ext": [
+          "lottie"
+        ],
         "name": "dotLottie Animation",
         "description": "dotLottie animation",
         "role": "Editor",
         "rank": "Owner",
         "exportedType": {
           "identifier": "io.dotlottie.lottie",
-          "conformsTo": ["public.zip-archive"]
+          "conformsTo": [
+            "public.zip-archive"
+          ]
         }
-      },
-      {
-        "ext": ["json"],
-        "name": "Lottie JSON Animation",
-        "description": "Lottie JSON animation",
-        "role": "Viewer",
-        "rank": "Alternate",
-        "contentTypes": ["public.json"]
       }
     ]
   }

@@ -1,0 +1,26 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "bundle": {
+    "fileAssociations": [
+      {
+        "ext": ["lottie"],
+        "name": "dotLottie Animation",
+        "description": "dotLottie animation",
+        "role": "Editor",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "io.dotlottie.lottie",
+          "conformsTo": ["public.zip-archive"]
+        }
+      },
+      {
+        "ext": ["json"],
+        "name": "Lottie JSON Animation",
+        "description": "Lottie JSON animation",
+        "role": "Viewer",
+        "rank": "Alternate",
+        "contentTypes": ["public.json"]
+      }
+    ]
+  }
+}

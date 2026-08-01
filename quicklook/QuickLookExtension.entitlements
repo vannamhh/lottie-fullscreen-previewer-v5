@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Quick Look extensions must be sandboxed. macOS hands the extension read
+	     access to the previewed file itself, so no broader file entitlement is
+	     needed here. -->
+	<key>com.apple.security.app-sandbox</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-only</key>
+	<true/>
+	<!-- WKWebView farms rendering out to helper processes (WebContent, GPU,
+	     Network). Without this, all three fail to launch inside the sandbox and
+	     the preview stays blank — even though nothing here touches the network. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
+</dict>
+</plist>
