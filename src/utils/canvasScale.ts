@@ -13,12 +13,28 @@ const MAX_CANVAS_DIMENSION = 8192;
 const MAX_CANVAS_PIXELS = 16.7e6; // iOS Safari refuses canvases past ~16.7M pixels
 const MIN_PIXEL_RATIO = 0.05; // only guards against a degenerate zero-sized target
 
+/**
+ * Playback budget. Measured on this app: render cost is linear in pixel count,
+ * and a fullscreen canvas on a retina display lands at ~4.5M pixels a frame,
+ * which drops a busy animation to single-digit fps — on the GPU renderer too.
+ * ~2M keeps typical animations at 60fps; the full budget above is restored the
+ * moment playback stops, so a paused or zoomed frame is still pixel-perfect.
+ */
+const PLAYBACK_MAX_PIXELS = 2.1e6;
+
+export interface RenderQualityOptions {
+  /** While frames are being drawn, cap pixels for smoothness over sharpness */
+  isPlaying?: boolean;
+}
+
 export function getRenderPixelRatio(
   layoutWidth: number,
   layoutHeight: number,
-  zoom: number
+  zoom: number,
+  options: RenderQualityOptions = {}
 ): number {
   const nativeRatio = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+  const pixelBudget = options.isPlaying ? PLAYBACK_MAX_PIXELS : MAX_CANVAS_PIXELS;
 
   // Layout sizes are unaffected by the transform, so this is the on-screen size
   const visualWidth = Math.max(1, layoutWidth * zoom);
@@ -28,7 +44,7 @@ export function getRenderPixelRatio(
     MAX_CANVAS_DIMENSION / visualWidth,
     MAX_CANVAS_DIMENSION / visualHeight
   );
-  const areaLimit = Math.sqrt(MAX_CANVAS_PIXELS / (visualWidth * visualHeight));
+  const areaLimit = Math.sqrt(pixelBudget / (visualWidth * visualHeight));
 
   // The budget always wins over any preferred ratio: overshooting it means the
   // browser hands back a canvas it never allocated, i.e. nothing renders at all.

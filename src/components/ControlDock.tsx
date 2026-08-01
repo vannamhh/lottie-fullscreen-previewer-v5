@@ -20,6 +20,29 @@ import {
 } from 'lucide-react';
 import { PlaybackState, ViewSettings, BackgroundType, CanvasFitMode } from '../types';
 
+// Module scope: these never change, so rebuilding them on every playback tick
+// was pure garbage for the collector.
+const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
+
+const BG_OPTIONS: Array<{ id: BackgroundType; label: string; preview: string }> = [
+  { id: 'checkerboard-dark', label: 'Dark Grid', preview: 'bg-checkerboard-dark border-slate-700' },
+  { id: 'checkerboard-light', label: 'Light Grid', preview: 'bg-checkerboard-light border-slate-300' },
+  { id: 'solid-dark', label: 'Dark Solid', preview: 'bg-slate-900 border-slate-700' },
+  { id: 'solid-white', label: 'Pure White', preview: 'bg-white border-slate-300' },
+  { id: 'solid-black', label: 'Pure Black', preview: 'bg-black border-slate-800' },
+  { id: 'gradient-purple', label: 'Purple Dark', preview: 'bg-gradient-to-r from-slate-900 to-purple-950 border-purple-800' },
+  { id: 'gradient-sunset', label: 'Sunset Glow', preview: 'bg-gradient-to-r from-amber-950 to-rose-950 border-rose-800' },
+  { id: 'gradient-cyber', label: 'Cyber Blue', preview: 'bg-gradient-to-r from-slate-950 to-cyan-950 border-cyan-800' }
+];
+
+const FIT_OPTIONS: Array<{ id: CanvasFitMode; label: string }> = [
+  { id: 'contain', label: 'Contain (Fit View)' },
+  { id: 'cover', label: 'Cover (Fill Screen)' },
+  { id: 'fill', label: 'Fill (Stretch)' },
+  { id: 'original', label: 'Original Size (1:1)' },
+  { id: 'custom', label: 'Custom Zoom' }
+];
+
 interface ControlDockProps {
   playbackState: PlaybackState;
   viewSettings: ViewSettings;
@@ -33,7 +56,7 @@ interface ControlDockProps {
   onToggleMode: () => void;
 }
 
-export const ControlDock: React.FC<ControlDockProps> = ({
+const ControlDockComponent: React.FC<ControlDockProps> = ({
   playbackState,
   viewSettings,
   setViewSettings,
@@ -48,27 +71,6 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showBgMenu, setShowBgMenu] = useState(false);
   const [showFitMenu, setShowFitMenu] = useState(false);
-
-  const speedOptions = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0];
-
-  const bgOptions: Array<{ id: BackgroundType; label: string; preview: string }> = [
-    { id: 'checkerboard-dark', label: 'Dark Grid', preview: 'bg-checkerboard-dark border-slate-700' },
-    { id: 'checkerboard-light', label: 'Light Grid', preview: 'bg-checkerboard-light border-slate-300' },
-    { id: 'solid-dark', label: 'Dark Solid', preview: 'bg-slate-900 border-slate-700' },
-    { id: 'solid-white', label: 'Pure White', preview: 'bg-white border-slate-300' },
-    { id: 'solid-black', label: 'Pure Black', preview: 'bg-black border-slate-800' },
-    { id: 'gradient-purple', label: 'Purple Dark', preview: 'bg-gradient-to-r from-slate-900 to-purple-950 border-purple-800' },
-    { id: 'gradient-sunset', label: 'Sunset Glow', preview: 'bg-gradient-to-r from-amber-950 to-rose-950 border-rose-800' },
-    { id: 'gradient-cyber', label: 'Cyber Blue', preview: 'bg-gradient-to-r from-slate-950 to-cyan-950 border-cyan-800' }
-  ];
-
-  const fitOptions: Array<{ id: CanvasFitMode; label: string }> = [
-    { id: 'contain', label: 'Contain (Fit View)' },
-    { id: 'cover', label: 'Cover (Fill Screen)' },
-    { id: 'fill', label: 'Fill (Stretch)' },
-    { id: 'original', label: 'Original Size (1:1)' },
-    { id: 'custom', label: 'Custom Zoom' }
-  ];
 
   // Frames are 0-indexed, so the last one is totalFrames - 1
   const maxFrame = Math.max(0, (playbackState.totalFrames || 100) - 1);
@@ -195,7 +197,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
               {showSpeedMenu && (
                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 p-2 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl flex flex-col gap-1 w-28 text-xs font-medium z-40">
                   <span className="text-[10px] uppercase font-bold text-slate-500 px-2 py-1">Tốc Độ Phát</span>
-                  {speedOptions.map(spd => (
+                  {SPEED_OPTIONS.map(spd => (
                     <button
                       key={spd}
                       onClick={() => {
@@ -231,7 +233,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                 {showBgMenu && (
                   <div className="absolute bottom-full mb-2 right-0 p-2 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl grid grid-cols-2 gap-1.5 w-56 text-xs z-40">
                     <span className="col-span-2 text-[10px] uppercase font-bold text-slate-500 px-1 py-0.5">Màu Nền Canvas</span>
-                    {bgOptions.map(bg => (
+                    {BG_OPTIONS.map(bg => (
                       <button
                         key={bg.id}
                         onClick={() => {
@@ -265,7 +267,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                 {showFitMenu && (
                   <div className="absolute bottom-full mb-2 right-0 p-2 bg-slate-900 border border-slate-800 rounded-xl shadow-2xl flex flex-col gap-1 w-44 text-xs z-40">
                     <span className="text-[10px] uppercase font-bold text-slate-500 px-2 py-1">Chế Độ Hiển Thị</span>
-                    {fitOptions.map(fit => (
+                    {FIT_OPTIONS.map(fit => (
                       <button
                         key={fit.id}
                         onClick={() => {
@@ -346,3 +348,5 @@ export const ControlDock: React.FC<ControlDockProps> = ({
     </div>
   );
 };
+
+export const ControlDock = React.memo(ControlDockComponent);

@@ -22,7 +22,7 @@ interface InspectorDrawerProps {
   onClose: () => void;
 }
 
-export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
+const InspectorDrawerComponent: React.FC<InspectorDrawerProps> = ({
   metadata,
   isOpen,
   onClose
@@ -342,3 +342,5 @@ export const InspectorDrawer: React.FC<InspectorDrawerProps> = ({
     </div>
   );
 };
+
+export const InspectorDrawer = React.memo(InspectorDrawerComponent);

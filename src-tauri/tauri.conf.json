@@ -1,0 +1,70 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Lottie Previewer",
+  "version": "0.1.0",
+  "identifier": "com.hoangnam.lottie-previewer",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Lottie Previewer",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 720,
+        "minHeight": 480,
+        "resizable": true,
+        "fullscreen": false,
+        "titleBarStyle": "Visible",
+        "backgroundColor": "#020617",
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "category": "GraphicsAndDesign",
+    "shortDescription": "Fullscreen Lottie and dotLottie previewer",
+    "longDescription": "Preview .lottie and Lottie JSON animations fullscreen with playback controls, layer inspection and export tools.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    },
+    "fileAssociations": [
+      {
+        "ext": ["lottie"],
+        "name": "dotLottie Animation",
+        "description": "dotLottie animation",
+        "role": "Editor",
+        "rank": "Owner",
+        "exportedType": {
+          "identifier": "io.dotlottie.lottie",
+          "conformsTo": ["public.zip-archive"]
+        }
+      },
+      {
+        "ext": ["json"],
+        "name": "Lottie JSON Animation",
+        "description": "Lottie JSON animation",
+        "role": "Viewer",
+        "rank": "Alternate",
+        "contentTypes": ["public.json"]
+      }
+    ]
+  }
+}

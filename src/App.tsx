@@ -11,7 +11,7 @@ import { UrlInputModal } from './components/UrlInputModal';
 import { ConverterModal } from './components/ConverterModal';
 import { DragDropOverlay } from './components/DragDropOverlay';
 
-import { LottieMetadata, PlaybackState, ViewSettings, SampleLottie } from './types';
+import { LottieMetadata, PlaybackState, ViewSettings, SampleLottie, CssFilterSettings } from './types';
 import {
   parseDotLottieFile,
   parseLottieJsonObject,
@@ -24,6 +24,7 @@ import { addRecentFile, RecentFileItem } from './utils/recentHistory';
 import { RecentFilesModal } from './components/RecentFilesModal';
 import { CssFiltersModal } from './components/CssFiltersModal';
 import { DEFAULT_CSS_FILTERS } from './utils/cssFilterUtils';
+import { listenForOpenedFiles } from './utils/tauriBridge';
 
 export const App: React.FC = () => {
   // Animation Sources
@@ -78,6 +79,12 @@ export const App: React.FC = () => {
   const dotLottieRef = useRef<DotLottie | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const playbackRef = useRef(playbackState);
+  playbackRef.current = playbackState;
+  const loadListenerTargetRef = useRef<DotLottie | null>(null);
+  // Set as soon as the user's own animation lands, so the demo sample fetched at
+  // startup cannot overwrite its metadata by resolving late.
+  const hasUserFileRef = useRef<boolean>(false);
 
   /**
    * Swap the canvas source, revoking the object URL of the file we are leaving.
@@ -102,6 +109,9 @@ export const App: React.FC = () => {
     fetch(SAMPLE_LOTTIES[0].url)
       .then(res => res.json())
       .then(json => {
+        // A file opened from Finder can beat this request home; if it did, the
+        // sample is already irrelevant.
+        if (hasUserFileRef.current) return;
         const meta = parseLottieJsonObject(
           json,
           'Success_Celebration.json',
@@ -121,7 +131,11 @@ export const App: React.FC = () => {
   // DotLottie Instance Handler
   const handleDotLottieRef = useCallback((instance: DotLottie | null) => {
     dotLottieRef.current = instance;
-    if (instance) {
+
+    // The player wrapper can hand back an instance it kept alive across a
+    // remount; attaching again would double every load event.
+    if (instance && loadListenerTargetRef.current !== instance) {
+      loadListenerTargetRef.current = instance;
       instance.addEventListener('load', () => {
         const total = Math.round(instance.totalFrames || 100);
         setPlaybackState(prev => ({ ...prev, totalFrames: total }));
@@ -140,6 +154,7 @@ export const App: React.FC = () => {
 
   // Process File Upload (.lottie or .json)
   const processFile = async (file: File) => {
+    hasUserFileRef.current = true;
     setCurrentSampleId(undefined);
     const isDotLottie = file.name.endsWith('.lottie') || file.name.endsWith('.zip');
 
@@ -203,6 +218,17 @@ export const App: React.FC = () => {
       reader.readAsText(file);
     }
   };
+
+  // Files handed over by macOS — Finder double-click on a .lottie, or "Open
+  // With" on a .json. Held in a ref so the subscription is created once while
+  // still invoking the current processFile.
+  const processFileRef = useRef(processFile);
+  processFileRef.current = processFile;
+
+  useEffect(
+    () => listenForOpenedFiles(file => { void processFileRef.current(file); }),
+    []
+  );
 
   // Drag & Drop Handlers
   const handleDragOver = (e: React.DragEvent) => {
@@ -391,88 +417,94 @@ export const App: React.FC = () => {
   };
 
   // Playback Control Handlers
-  const handlePlayPause = () => {
+  //
+  // These read the latest playback values through a ref rather than through
+  // closures. Depending on playbackState would give every handler a new identity
+  // on each frame tick, which defeats the memoized children below and re-subscribes
+  // the keyboard listener several times a second.
+  const handlePlayPause = useCallback(() => {
     if (!dotLottieRef.current) {
       setPlaybackState(prev => ({ ...prev, isPlaying: !prev.isPlaying }));
       return;
     }
 
-    if (playbackState.isPlaying) {
+    if (playbackRef.current.isPlaying) {
       dotLottieRef.current.pause();
       setPlaybackState(prev => ({ ...prev, isPlaying: false }));
     } else {
       dotLottieRef.current.play();
       setPlaybackState(prev => ({ ...prev, isPlaying: true }));
     }
-  };
+  }, []);
 
-  const handleRestart = () => {
+  const handleRestart = useCallback(() => {
     if (dotLottieRef.current) {
       dotLottieRef.current.stop();
       dotLottieRef.current.play();
     }
     setPlaybackState(prev => ({ ...prev, currentFrame: 0, isPlaying: true }));
-  };
+  }, []);
 
-  const handleStepFrame = (delta: number) => {
+  const handleStepFrame = useCallback((delta: number) => {
     if (dotLottieRef.current) {
       dotLottieRef.current.pause();
       // Valid frames are 0 … totalFrames - 1
-      const maxFrame = Math.max(0, playbackState.totalFrames - 1);
-      const nextFrame = Math.max(0, Math.min(maxFrame, playbackState.currentFrame + delta));
+      const { totalFrames, currentFrame } = playbackRef.current;
+      const maxFrame = Math.max(0, totalFrames - 1);
+      const nextFrame = Math.max(0, Math.min(maxFrame, currentFrame + delta));
       dotLottieRef.current.setFrame(nextFrame);
       setPlaybackState(prev => ({ ...prev, currentFrame: nextFrame, isPlaying: false }));
     }
-  };
+  }, []);
 
-  const handleSeekFrame = (frame: number) => {
+  const handleSeekFrame = useCallback((frame: number) => {
     if (dotLottieRef.current) {
       dotLottieRef.current.setFrame(frame);
     }
     setPlaybackState(prev => ({ ...prev, currentFrame: frame }));
-  };
+  }, []);
 
-  const handleSetSpeed = (speed: number) => {
+  const handleSetSpeed = useCallback((speed: number) => {
     if (dotLottieRef.current) {
       dotLottieRef.current.setSpeed(speed);
     }
     setPlaybackState(prev => ({ ...prev, speed }));
-  };
+  }, []);
 
-  const handleToggleLoop = () => {
+  const handleToggleLoop = useCallback(() => {
     setPlaybackState(prev => ({ ...prev, loop: !prev.loop }));
-  };
+  }, []);
 
-  const handleToggleMode = () => {
-    const nextMode = playbackState.mode === 'normal' ? 'bounce' : 'normal';
+  const handleToggleMode = useCallback(() => {
+    const nextMode = playbackRef.current.mode === 'normal' ? 'bounce' : 'normal';
     if (dotLottieRef.current) {
       dotLottieRef.current.setMode(nextMode);
     }
     setPlaybackState(prev => ({ ...prev, mode: nextMode }));
-  };
+  }, []);
 
   // Capture Screenshot Frame as PNG
-  const handleCaptureFrame = () => {
+  const handleCaptureFrame = useCallback(() => {
     const canvas = document.querySelector('canvas');
     if (canvas) {
       const dataUrl = canvas.toDataURL('image/png');
       const a = document.createElement('a');
       a.href = dataUrl;
-      a.download = `lottie-frame-${playbackState.currentFrame}.png`;
+      a.download = `lottie-frame-${playbackRef.current.currentFrame}.png`;
       a.click();
     } else {
       alert('Không tìm thấy canvas element để chụp khung hình.');
     }
-  };
+  }, []);
 
   // Toggle Fullscreen Mode
-  const handleToggleFullscreen = () => {
+  const handleToggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch(() => {});
     } else {
       document.exitFullscreen().catch(() => {});
     }
-  };
+  }, []);
 
   // The browser is the source of truth: Esc and browser-initiated exits never go
   // through the button handler, which would otherwise leave the icon inverted.
@@ -571,21 +603,62 @@ export const App: React.FC = () => {
           break;
         case 'BracketLeft':
           e.preventDefault();
-          handleSetSpeed(Math.max(0.25, Number((playbackState.speed - 0.25).toFixed(2))));
+          handleSetSpeed(Math.max(0.25, Number((playbackRef.current.speed - 0.25).toFixed(2))));
           break;
         case 'BracketRight':
           e.preventDefault();
-          handleSetSpeed(Math.min(3.0, Number((playbackState.speed + 0.25).toFixed(2))));
+          handleSetSpeed(Math.min(3.0, Number((playbackRef.current.speed + 0.25).toFixed(2))));
           break;
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [playbackState.speed, playbackState.isPlaying, playbackState.currentFrame, isAnyModalOpen]);
+    // Every handler below is identity-stable, so this subscribes once instead of
+    // tearing the listener down and rebuilding it on every playback tick.
+  }, [
+    isAnyModalOpen,
+    handlePlayPause,
+    handleToggleFullscreen,
+    handleRestart,
+    handleToggleLoop,
+    handleStepFrame,
+    handleSetSpeed
+  ]);
+
+  // Stable identities for everything handed to the memoized children below —
+  // an inline arrow would be a new prop on every render and defeat the memo.
+  const openFilePicker = useCallback(() => fileInputRef.current?.click(), []);
+  const openSampleLibrary = useCallback(() => setIsSampleModalOpen(true), []);
+  const closeSampleLibrary = useCallback(() => setIsSampleModalOpen(false), []);
+  const openUrlModal = useCallback(() => setIsUrlModalOpen(true), []);
+  const closeUrlModal = useCallback(() => setIsUrlModalOpen(false), []);
+  const openRecentFiles = useCallback(() => setIsRecentModalOpen(true), []);
+  const closeRecentFiles = useCallback(() => setIsRecentModalOpen(false), []);
+  const openCssFilters = useCallback(() => setIsCssFiltersModalOpen(true), []);
+  const closeCssFilters = useCallback(() => setIsCssFiltersModalOpen(false), []);
+  const openCodeExport = useCallback(() => setIsCodeModalOpen(true), []);
+  const closeCodeExport = useCallback(() => setIsCodeModalOpen(false), []);
+  const openConverter = useCallback(() => setIsConverterModalOpen(true), []);
+  const closeConverter = useCallback(() => setIsConverterModalOpen(false), []);
+  const openShortcuts = useCallback(() => setIsShortcutsModalOpen(true), []);
+  const closeShortcuts = useCallback(() => setIsShortcutsModalOpen(false), []);
+  const toggleInspector = useCallback(() => setIsInspectorOpen(prev => !prev), []);
+  const closeInspector = useCallback(() => setIsInspectorOpen(false), []);
+  const handleLoadError = useCallback((err: string) => console.error(err), []);
+  const animationAspectRatio =
+    metadata && metadata.width > 0 && metadata.height > 0 ? metadata.width / metadata.height : null;
+  const revealControls = useCallback(
+    () => setViewSettings(prev => (prev.controlsHidden ? { ...prev, controlsHidden: false } : prev)),
+    []
+  );
+  const handleChangeFilters = useCallback(
+    (newFilters: CssFilterSettings) => setViewSettings(prev => ({ ...prev, filters: newFilters })),
+    []
+  );
 
   return (
-    <div 
+    <div
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -611,11 +684,14 @@ export const App: React.FC = () => {
         data={jsonData}
         viewSettings={viewSettings}
         setViewSettings={setViewSettings}
-        playbackState={playbackState}
+        isPlaying={playbackState.isPlaying}
+        loop={playbackState.loop}
+        speed={playbackState.speed}
+        aspectRatio={animationAspectRatio}
         onDotLottieRef={handleDotLottieRef}
         onFrameChange={handleFrameChange}
-        onLoadError={(err) => console.error(err)}
-        onCanvasClick={() => setViewSettings(prev => ({ ...prev, controlsHidden: false }))}
+        onLoadError={handleLoadError}
+        onCanvasClick={revealControls}
       />
 
       {/* Floating Header Bar */}
@@ -623,16 +699,16 @@ export const App: React.FC = () => {
         metadata={metadata}
         viewSettings={viewSettings}
         setViewSettings={setViewSettings}
-        onOpenFileClick={() => fileInputRef.current?.click()}
-        onOpenSampleLibrary={() => setIsSampleModalOpen(true)}
-        onOpenUrlModal={() => setIsUrlModalOpen(true)}
-        onOpenRecentFiles={() => setIsRecentModalOpen(true)}
-        onOpenCssFilters={() => setIsCssFiltersModalOpen(true)}
-        onToggleInspector={() => setIsInspectorOpen(!isInspectorOpen)}
-        onOpenCodeExport={() => setIsCodeModalOpen(true)}
-        onOpenConverter={() => setIsConverterModalOpen(true)}
+        onOpenFileClick={openFilePicker}
+        onOpenSampleLibrary={openSampleLibrary}
+        onOpenUrlModal={openUrlModal}
+        onOpenRecentFiles={openRecentFiles}
+        onOpenCssFilters={openCssFilters}
+        onToggleInspector={toggleInspector}
+        onOpenCodeExport={openCodeExport}
+        onOpenConverter={openConverter}
         onCaptureFrame={handleCaptureFrame}
-        onOpenShortcuts={() => setIsShortcutsModalOpen(true)}
+        onOpenShortcuts={openShortcuts}
         isInspectorOpen={isInspectorOpen}
         isFullscreen={isFullscreen}
         onToggleFullscreen={handleToggleFullscreen}
@@ -656,57 +732,62 @@ export const App: React.FC = () => {
       <InspectorDrawer
         metadata={metadata}
         isOpen={isInspectorOpen}
-        onClose={() => setIsInspectorOpen(false)}
+        onClose={closeInspector}
       />
 
-      {/* Modals */}
-      <SampleLibraryModal
-        isOpen={isSampleModalOpen}
-        onClose={() => setIsSampleModalOpen(false)}
-        onSelectSample={handleSelectSample}
-        currentSampleId={currentSampleId}
-      />
+      {/* Modals — mounted only while open, so a closed dialog costs nothing per frame */}
+      {isSampleModalOpen && (
+        <SampleLibraryModal
+          isOpen
+          onClose={closeSampleLibrary}
+          onSelectSample={handleSelectSample}
+          currentSampleId={currentSampleId}
+        />
+      )}
 
-      <CodeExportModal
-        isOpen={isCodeModalOpen}
-        onClose={() => setIsCodeModalOpen(false)}
-        metadata={metadata}
-        fileSourceUrl={fileSourceUrl}
-      />
+      {isCodeModalOpen && (
+        <CodeExportModal
+          isOpen
+          onClose={closeCodeExport}
+          metadata={metadata}
+          fileSourceUrl={fileSourceUrl}
+        />
+      )}
 
-      <ShortcutsModal
-        isOpen={isShortcutsModalOpen}
-        onClose={() => setIsShortcutsModalOpen(false)}
-      />
+      {isShortcutsModalOpen && <ShortcutsModal isOpen onClose={closeShortcuts} />}
 
-      <UrlInputModal
-        isOpen={isUrlModalOpen}
-        onClose={() => setIsUrlModalOpen(false)}
-        onLoadUrl={handleLoadUrl}
-      />
+      {isUrlModalOpen && (
+        <UrlInputModal isOpen onClose={closeUrlModal} onLoadUrl={handleLoadUrl} />
+      )}
 
-      <ConverterModal
-        isOpen={isConverterModalOpen}
-        onClose={() => setIsConverterModalOpen(false)}
-        metadata={metadata}
-        jsonData={jsonData}
-        fileSourceUrl={fileSourceUrl}
-        onPreviewConverted={handlePreviewConverted}
-      />
+      {isConverterModalOpen && (
+        <ConverterModal
+          isOpen
+          onClose={closeConverter}
+          metadata={metadata}
+          jsonData={jsonData}
+          fileSourceUrl={fileSourceUrl}
+          onPreviewConverted={handlePreviewConverted}
+        />
+      )}
 
-      <RecentFilesModal
-        isOpen={isRecentModalOpen}
-        onClose={() => setIsRecentModalOpen(false)}
-        onSelectRecentFile={handleSelectRecentFile}
-        onOpenFileClick={() => fileInputRef.current?.click()}
-      />
+      {isRecentModalOpen && (
+        <RecentFilesModal
+          isOpen
+          onClose={closeRecentFiles}
+          onSelectRecentFile={handleSelectRecentFile}
+          onOpenFileClick={openFilePicker}
+        />
+      )}
 
-      <CssFiltersModal
-        isOpen={isCssFiltersModalOpen}
-        onClose={() => setIsCssFiltersModalOpen(false)}
-        filters={viewSettings.filters}
-        onChangeFilters={(newFilters) => setViewSettings(prev => ({ ...prev, filters: newFilters }))}
-      />
+      {isCssFiltersModalOpen && (
+        <CssFiltersModal
+          isOpen
+          onClose={closeCssFilters}
+          filters={viewSettings.filters}
+          onChangeFilters={handleChangeFilters}
+        />
+      )}
 
       {/* Drag and Drop Fullscreen Overlay */}
       <DragDropOverlay isDragging={isDragging} />

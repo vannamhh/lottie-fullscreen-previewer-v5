@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { DotLottieReact, DotLottie } from '@lottiefiles/dotlottie-react';
+import { DotLottie } from '@lottiefiles/dotlottie-react';
+import { LottiePlayer } from '../utils/lottiePlayer';
 import { 
   X, 
   History, 
@@ -61,10 +62,15 @@ const RecentFileRow: React.FC<{
     if (sample) src = sample.url;
   }
 
+  // Each row is a full WASM player with its own render loop. Twenty of them
+  // autoplaying at once starves the main animation, so rows hold their first
+  // frame as a still and only animate under the cursor.
   useEffect(() => {
     if (!dotLottie) return;
     if (isHovered) {
       dotLottie.play();
+    } else {
+      dotLottie.pause();
     }
   }, [isHovered, dotLottie]);
 
@@ -87,10 +93,10 @@ const RecentFileRow: React.FC<{
           }`}>
             {data ? (
               <div className="w-full h-full p-2 flex items-center justify-center">
-                <DotLottieReact
+                <LottiePlayer
                   data={data}
                   loop={true}
-                  autoplay={true}
+                  autoplay={false}
                   dotLottieRefCallback={setDotLottie}
                   style={{ width: '100%', height: '100%' }}
                   className="w-full h-full object-contain pointer-events-none"
@@ -98,10 +104,10 @@ const RecentFileRow: React.FC<{
               </div>
             ) : src ? (
               <div className="w-full h-full p-2 flex items-center justify-center">
-                <DotLottieReact
+                <LottiePlayer
                   src={src}
                   loop={true}
-                  autoplay={true}
+                  autoplay={false}
                   dotLottieRefCallback={setDotLottie}
                   style={{ width: '100%', height: '100%' }}
                   className="w-full h-full object-contain pointer-events-none"

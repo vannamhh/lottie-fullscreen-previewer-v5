@@ -38,7 +38,7 @@ interface HeaderBarProps {
   onToggleFullscreen: () => void;
 }
 
-export const HeaderBar: React.FC<HeaderBarProps> = ({
+const HeaderBarComponent: React.FC<HeaderBarProps> = ({
   metadata,
   viewSettings,
   setViewSettings,
@@ -228,3 +228,5 @@ export const HeaderBar: React.FC<HeaderBarProps> = ({
     </header>
   );
 };
+
+export const HeaderBar = React.memo(HeaderBarComponent);

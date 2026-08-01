@@ -5,7 +5,7 @@ interface DragDropOverlayProps {
   isDragging: boolean;
 }
 
-export const DragDropOverlay: React.FC<DragDropOverlayProps> = ({ isDragging }) => {
+const DragDropOverlayComponent: React.FC<DragDropOverlayProps> = ({ isDragging }) => {
   if (!isDragging) return null;
 
   return (
@@ -30,3 +30,5 @@ export const DragDropOverlay: React.FC<DragDropOverlayProps> = ({ isDragging }) 
     </div>
   );
 };
+
+export const DragDropOverlay = React.memo(DragDropOverlayComponent);

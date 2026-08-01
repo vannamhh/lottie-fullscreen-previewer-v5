@@ -1,29 +1,42 @@
 import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
-import { DotLottieReact, DotLottie } from '@lottiefiles/dotlottie-react';
-import { ViewSettings, PlaybackState } from '../types';
+import { DotLottie } from '@lottiefiles/dotlottie-react';
+import { LottiePlayer } from '../utils/lottiePlayer';
+import { ViewSettings } from '../types';
 import { getFilterCssString } from '../utils/cssFilterUtils';
 import { getRenderPixelRatio } from '../utils/canvasScale';
 
 const RESIZE_DEBOUNCE_MS = 120;
+
+/** ~15Hz: smooth enough for a frame counter, a quarter of the re-renders of 60Hz */
+const FRAME_UPDATE_INTERVAL_MS = 66;
 
 interface LottieCanvasProps {
   src: string | null;
   data: any | null;
   viewSettings: ViewSettings;
   setViewSettings: React.Dispatch<React.SetStateAction<ViewSettings>>;
-  playbackState: PlaybackState;
+  // Only the fields the player actually consumes: taking the whole playbackState
+  // would re-render the canvas on every frame tick for a value it never reads.
+  isPlaying: boolean;
+  loop: boolean;
+  speed: number;
+  /** Animation width/height. Lets the canvas match the artwork instead of the viewport. */
+  aspectRatio?: number | null;
   onDotLottieRef: (dotLottie: DotLottie | null) => void;
   onFrameChange: (frame: number, total: number) => void;
   onLoadError: (error: string) => void;
   onCanvasClick: () => void;
 }
 
-export const LottieCanvas: React.FC<LottieCanvasProps> = ({
+const LottieCanvasComponent: React.FC<LottieCanvasProps> = ({
   src,
   data,
   viewSettings,
   setViewSettings,
-  playbackState,
+  isPlaying,
+  loop,
+  speed,
+  aspectRatio,
   onDotLottieRef,
   onFrameChange,
   onLoadError,
@@ -36,6 +49,9 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
 
   const dotLottieRef = useRef<DotLottie | null>(null);
   const resizeTimerRef = useRef<number | undefined>(undefined);
+  const frameListenerRef = useRef<((evt: { currentFrame: number }) => void) | null>(null);
+  const lastFrameEmitRef = useRef(0);
+  const panFrameRef = useRef<number | null>(null);
 
   // 'token' forces the re-render effect to run even when the ratio itself is
   // unchanged — a zoom from 1.0 to 1.15 needs a re-raster just the same.
@@ -58,7 +74,9 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
         const canvas = containerRef.current?.querySelector('canvas');
         if (!canvas) return;
         setRenderScale(prev => ({
-          ratio: getRenderPixelRatio(canvas.clientWidth, canvas.clientHeight, viewSettings.zoom),
+          ratio: getRenderPixelRatio(canvas.clientWidth, canvas.clientHeight, viewSettings.zoom, {
+            isPlaying
+          }),
           token: prev.token + 1
         }));
       }, RESIZE_DEBOUNCE_MS);
@@ -70,7 +88,9 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
       window.removeEventListener('resize', schedule);
       window.clearTimeout(resizeTimerRef.current);
     };
-  }, [viewSettings.zoom, viewSettings.fitMode]);
+    // Pausing re-runs this and restores full detail; starting playback trades it
+    // back for frame rate.
+  }, [viewSettings.zoom, viewSettings.fitMode, aspectRatio, isPlaying]);
 
   // Effects run child-first, so DotLottieReact has already pushed the new
   // devicePixelRatio through setRenderConfig by the time this runs; resize() is
@@ -81,17 +101,33 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
 
   // Handle dotLottie instance reference callback
   const handleDotLottieRef = useCallback((instance: DotLottie | null) => {
+    // Detach from the outgoing instance, or the listeners pile up every time the
+    // player remounts (StrictMode alone mounts it twice) and each frame then
+    // fires the update N times over.
+    const previous = dotLottieRef.current;
+    if (previous && frameListenerRef.current) {
+      previous.removeEventListener('frame', frameListenerRef.current);
+    }
+    frameListenerRef.current = null;
+
     dotLottieRef.current = instance;
     onDotLottieRef(instance);
 
     if (instance) {
-      // Event listener for frame updates
+      // The player emits 'frame' on every rendered frame. Forwarding all of them
+      // would re-render the React tree 60x/second for a counter and a slider the
+      // eye reads fine at 15Hz, which is where the stutter comes from.
       const onFrame = (evt: { currentFrame: number }) => {
-        if (typeof evt.currentFrame === 'number') {
-          onFrameChange(Math.round(evt.currentFrame), Math.round(instance.totalFrames || 0));
-        }
+        if (typeof evt.currentFrame !== 'number') return;
+
+        const now = performance.now();
+        if (now - lastFrameEmitRef.current < FRAME_UPDATE_INTERVAL_MS) return;
+        lastFrameEmitRef.current = now;
+
+        onFrameChange(Math.round(evt.currentFrame), Math.round(instance.totalFrames || 0));
       };
 
+      frameListenerRef.current = onFrame;
       instance.addEventListener('frame', onFrame);
     }
   }, [onDotLottieRef, onFrameChange]);
@@ -176,16 +212,28 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
 
     switch (viewSettings.fitMode) {
       case 'contain':
-        return {
-          maxWidth: '90vw',
-          maxHeight: '85vh',
-          width: '100%',
-          height: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          ...commonStyle
-        };
+        // Match the artwork's shape rather than the viewport's. A square
+        // animation in a 16:9 box wastes ~45% of every rasterised frame on empty
+        // background, and that cost is paid 60 times a second.
+        return aspectRatio && aspectRatio > 0
+          ? {
+              width: `min(90vw, calc(85vh * ${aspectRatio.toFixed(4)}))`,
+              aspectRatio: `${aspectRatio.toFixed(4)}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              ...commonStyle
+            }
+          : {
+              maxWidth: '90vw',
+              maxHeight: '85vh',
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              ...commonStyle
+            };
       case 'cover':
         return {
           width: '100vw',
@@ -220,22 +268,36 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
     }
   };
 
+  // Trackpads emit mousemove faster than the screen refreshes, so commit at most
+  // one pan update per frame instead of one state update per event.
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (isPanning) {
-      const dx = e.clientX - dragStart.x;
-      const dy = e.clientY - dragStart.y;
-      
+    if (!isPanning) return;
+
+    const dx = e.clientX - dragStart.x;
+    const dy = e.clientY - dragStart.y;
+
+    if (panFrameRef.current !== null) return;
+    panFrameRef.current = window.requestAnimationFrame(() => {
+      panFrameRef.current = null;
       setViewSettings(prev => ({
         ...prev,
         panX: panStart.x + dx,
         panY: panStart.y + dy
       }));
-    }
+    });
   };
 
   const handleMouseUp = () => {
+    if (panFrameRef.current !== null) {
+      window.cancelAnimationFrame(panFrameRef.current);
+      panFrameRef.current = null;
+    }
     setIsPanning(false);
   };
+
+  useEffect(() => () => {
+    if (panFrameRef.current !== null) window.cancelAnimationFrame(panFrameRef.current);
+  }, []);
 
   // Double Click Reset View
   const handleDoubleClick = (e: React.MouseEvent) => {
@@ -294,22 +356,22 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
         className="relative flex items-center justify-center"
       >
         {src ? (
-          <DotLottieReact
+          <LottiePlayer
             src={src}
-            loop={playbackState.loop}
-            autoplay={playbackState.isPlaying}
-            speed={playbackState.speed}
+            loop={loop}
+            autoplay={isPlaying}
+            speed={speed}
             renderConfig={renderConfig}
             dotLottieRefCallback={handleDotLottieRef}
             onError={() => onLoadError('Không thể tải tệp Lottie từ nguồn này.')}
             className="w-full h-full object-contain pointer-events-none"
           />
         ) : data ? (
-          <DotLottieReact
+          <LottiePlayer
             data={data}
-            loop={playbackState.loop}
-            autoplay={playbackState.isPlaying}
-            speed={playbackState.speed}
+            loop={loop}
+            autoplay={isPlaying}
+            speed={speed}
             renderConfig={renderConfig}
             dotLottieRefCallback={handleDotLottieRef}
             onError={() => onLoadError('Lỗi dữ liệu JSON Lottie không hợp lệ.')}
@@ -332,4 +394,6 @@ export const LottieCanvas: React.FC<LottieCanvasProps> = ({
     </div>
   );
 };
+
+export const LottieCanvas = React.memo(LottieCanvasComponent);
 
