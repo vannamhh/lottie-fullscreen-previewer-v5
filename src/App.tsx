@@ -209,7 +209,9 @@ export const App: React.FC = () => {
             format: 'json',
             sizeFormatted: formatBytes(file.size),
             sizeBytes: file.size,
-            jsonData: content.length < 2500000 ? json : undefined
+            // addRecentFile drops the cached copy on its own if it is too big for
+            // localStorage; the entry itself is kept either way.
+            jsonData: json
           });
         } catch (err) {
           alert('Lỗi định dạng JSON Lottie không hợp lệ.');
@@ -332,7 +334,7 @@ export const App: React.FC = () => {
         url,
         // A .lottie's inner JSON references images held in the archive, so it is
         // only worth caching for plain JSON animations.
-        jsonData: !isDotLottie && sizeBytes < 2500000 ? json : undefined
+        jsonData: !isDotLottie ? json : undefined
       });
     } catch (err) {
       // The player fetches the URL itself and may well succeed where this read was
@@ -374,7 +376,7 @@ export const App: React.FC = () => {
         format: 'json',
         sizeFormatted: meta.fileSizeFormatted,
         sizeBytes: jsonStr.length,
-        jsonData: jsonStr.length < 2500000 ? json : undefined
+        jsonData: json
       });
     }
   };
@@ -473,6 +475,11 @@ export const App: React.FC = () => {
 
   const handleToggleLoop = useCallback(() => {
     setPlaybackState(prev => ({ ...prev, loop: !prev.loop }));
+  }, []);
+
+  // Reset the view transform: back to 100% zoom with the animation re-centred.
+  const handleResetView = useCallback(() => {
+    setViewSettings(prev => ({ ...prev, zoom: 1.0, panX: 0, panY: 0 }));
   }, []);
 
   const handleToggleMode = useCallback(() => {
@@ -591,7 +598,7 @@ export const App: React.FC = () => {
         case 'Digit0':
         case 'Numpad0':
           e.preventDefault();
-          setViewSettings(prev => ({ ...prev, zoom: 1.0, panX: 0, panY: 0 }));
+          handleResetView();
           break;
         case 'ArrowLeft':
           e.preventDefault();
@@ -623,7 +630,8 @@ export const App: React.FC = () => {
     handleRestart,
     handleToggleLoop,
     handleStepFrame,
-    handleSetSpeed
+    handleSetSpeed,
+    handleResetView
   ]);
 
   // Stable identities for everything handed to the memoized children below —
@@ -726,6 +734,7 @@ export const App: React.FC = () => {
         onSetSpeed={handleSetSpeed}
         onToggleLoop={handleToggleLoop}
         onToggleMode={handleToggleMode}
+        onResetView={handleResetView}
       />
 
       {/* Side Inspector Drawer */}

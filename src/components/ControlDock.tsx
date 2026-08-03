@@ -16,7 +16,8 @@ import {
   Palette, 
   SlidersHorizontal,
   Maximize2,
-  Crosshair
+  Crosshair,
+  Focus
 } from 'lucide-react';
 import { PlaybackState, ViewSettings, BackgroundType, CanvasFitMode } from '../types';
 
@@ -54,6 +55,8 @@ interface ControlDockProps {
   onSetSpeed: (speed: number) => void;
   onToggleLoop: () => void;
   onToggleMode: () => void;
+  /** Back to 100% zoom, animation re-centred. */
+  onResetView: () => void;
 }
 
 const ControlDockComponent: React.FC<ControlDockProps> = ({
@@ -66,7 +69,8 @@ const ControlDockComponent: React.FC<ControlDockProps> = ({
   onSeekFrame,
   onSetSpeed,
   onToggleLoop,
-  onToggleMode
+  onToggleMode,
+  onResetView
 }) => {
   const [showSpeedMenu, setShowSpeedMenu] = useState(false);
   const [showBgMenu, setShowBgMenu] = useState(false);
@@ -74,6 +78,10 @@ const ControlDockComponent: React.FC<ControlDockProps> = ({
 
   // Frames are 0-indexed, so the last one is totalFrames - 1
   const maxFrame = Math.max(0, (playbackState.totalFrames || 100) - 1);
+
+  // Nothing to reset when the view is already at 100% dead centre.
+  const isViewTransformed =
+    viewSettings.zoom !== 1 || viewSettings.panX !== 0 || viewSettings.panY !== 0;
 
   return (
     <div className={`fixed bottom-0 left-0 right-0 z-30 pointer-events-none transition-all duration-300 ${
@@ -296,9 +304,13 @@ const ControlDockComponent: React.FC<ControlDockProps> = ({
                 >
                   <ZoomOut className="w-3.5 h-3.5" />
                 </button>
-                <span className="text-[11px] font-mono text-slate-300 px-1 min-w-[36px] text-center">
+                <button
+                  onClick={onResetView}
+                  className="text-[11px] font-mono text-slate-300 hover:text-white px-1 min-w-[38px] text-center rounded-lg transition-all"
+                  title="Đặt lại 100% và căn giữa (phím 0)"
+                >
                   {Math.round(viewSettings.zoom * 100)}%
-                </span>
+                </button>
                 <button
                   onClick={() => setViewSettings(prev => ({ ...prev, zoom: Math.min(4.0, Number((prev.zoom + 0.2).toFixed(1))) }))}
                   className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-all"
@@ -307,6 +319,23 @@ const ControlDockComponent: React.FC<ControlDockProps> = ({
                   <ZoomIn className="w-3.5 h-3.5" />
                 </button>
               </div>
+
+              {/* Reset View: 100% zoom, back to centre. Kept outside the zoom
+                  cluster above so it survives on narrow screens, where that
+                  cluster is hidden. */}
+              <button
+                onClick={onResetView}
+                disabled={!isViewTransformed}
+                className={`p-2 rounded-xl transition-all ${
+                  isViewTransformed
+                    ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-600/50 hover:text-white'
+                    : 'text-slate-600 border border-transparent cursor-default'
+                }`}
+                title="Đặt lại 100% và căn giữa (phím 0)"
+                aria-label="Đặt lại khung nhìn về 100% và căn giữa"
+              >
+                <Focus className="w-4 h-4" />
+              </button>
 
               {/* Toggle Grid */}
               <button

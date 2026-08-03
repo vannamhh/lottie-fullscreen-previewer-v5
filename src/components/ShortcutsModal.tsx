@@ -15,7 +15,7 @@ export const ShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose 
     { key: 'R', desc: 'Phát lại từ đầu (Restart)' },
     { key: 'H', desc: 'Ẩn / Hiện thanh công cụ (Toggle UI)' },
     { key: '+ / -', desc: 'Thu phóng Canvas (Zoom In / Zoom Out)' },
-    { key: '0', desc: 'Đặt lại góc nhìn (Reset Zoom & Pan)' },
+    { key: '0', desc: 'Đặt lại 100% và căn giữa (Reset Zoom & Pan)' },
     { key: 'Kéo Chuột (Drag)', desc: 'Di chuyển vị trí Canvas (Pan X/Y)' },
     { key: 'Con Lăn (Wheel)', desc: 'Thu phóng tâm theo con lăn chuột' },
     { key: 'Alt + Mũi Tên', desc: 'Di chuyển Canvas bằng phím mũi tên' },
