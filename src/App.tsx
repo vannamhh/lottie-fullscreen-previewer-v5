@@ -25,6 +25,8 @@ import { RecentFilesModal } from './components/RecentFilesModal';
 import { CssFiltersModal } from './components/CssFiltersModal';
 import { DEFAULT_CSS_FILTERS } from './utils/cssFilterUtils';
 import { listenForOpenedFiles } from './utils/tauriBridge';
+import { notify } from './utils/notify';
+import { NoticeStack } from './components/NoticeStack';
 
 export const App: React.FC = () => {
   // Animation Sources
@@ -182,7 +184,7 @@ export const App: React.FC = () => {
           // would guarantee a dead link on the next visit.
         });
       } catch (err) {
-        alert('Lỗi khi đọc tệp .lottie: ' + (err instanceof Error ? err.message : String(err)));
+        notify('Lỗi khi đọc tệp .lottie: ' + (err instanceof Error ? err.message : String(err)));
       }
     } else {
       // Standard Lottie JSON
@@ -214,7 +216,7 @@ export const App: React.FC = () => {
             jsonData: json
           });
         } catch (err) {
-          alert('Lỗi định dạng JSON Lottie không hợp lệ.');
+          notify('Lỗi định dạng JSON Lottie không hợp lệ.');
         }
       };
       reader.readAsText(file);
@@ -414,7 +416,7 @@ export const App: React.FC = () => {
       return;
     }
 
-    alert(`Không còn dữ liệu tạm của "${item.name}". Vui lòng mở lại tệp này từ máy tính.`);
+    notify(`Không còn dữ liệu tạm của "${item.name}". Vui lòng mở lại tệp này từ máy tính.`, 'info');
     fileInputRef.current?.click();
   };
 
@@ -500,7 +502,7 @@ export const App: React.FC = () => {
       a.download = `lottie-frame-${playbackRef.current.currentFrame}.png`;
       a.click();
     } else {
-      alert('Không tìm thấy canvas element để chụp khung hình.');
+      notify('Không tìm thấy canvas element để chụp khung hình.');
     }
   }, []);
 
@@ -800,6 +802,9 @@ export const App: React.FC = () => {
 
       {/* Drag and Drop Fullscreen Overlay */}
       <DragDropOverlay isDragging={isDragging} />
+
+      {/* In-app notices — the webview has no native alert() to fall back on */}
+      <NoticeStack />
     </div>
   );
 };

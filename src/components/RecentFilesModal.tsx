@@ -208,12 +208,21 @@ export const RecentFilesModal: React.FC<RecentFilesModalProps> = ({
   const [items, setItems] = useState<RecentFileItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'favorites' | 'json' | 'dotlottie'>('all');
+  const [confirmingClear, setConfirmingClear] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setItems(getRecentFiles());
+      setConfirmingClear(false);
     }
   }, [isOpen]);
+
+  // Auto-cancel the confirmation so a stray click never leaves the button armed.
+  useEffect(() => {
+    if (!confirmingClear) return;
+    const timer = window.setTimeout(() => setConfirmingClear(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [confirmingClear]);
 
   if (!isOpen) return null;
 
@@ -229,11 +238,16 @@ export const RecentFilesModal: React.FC<RecentFilesModalProps> = ({
     setItems(updated);
   };
 
+  // Confirmed in-place rather than through window.confirm(): the macOS webview
+  // Tauri embeds has no handler for JavaScript dialogs, so confirm() never shows
+  // anything and always answers false — the button simply did nothing.
   const handleClearAll = () => {
-    if (window.confirm('Bạn có chắc chắn muốn xóa toàn bộ lịch sử tệp gần đây không?')) {
-      const updated = clearRecentFiles();
-      setItems(updated);
+    if (!confirmingClear) {
+      setConfirmingClear(true);
+      return;
     }
+    setItems(clearRecentFiles());
+    setConfirmingClear(false);
   };
 
   // Filter items
@@ -297,14 +311,31 @@ export const RecentFilesModal: React.FC<RecentFilesModalProps> = ({
             </div>
 
             {items.length > 0 && (
-              <button
-                onClick={handleClearAll}
-                className="px-3 py-2 bg-slate-900 hover:bg-red-500/20 text-slate-400 hover:text-red-300 border border-slate-800 hover:border-red-500/30 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all"
-                title="Xóa toàn bộ lịch sử"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Xóa Lịch Sử</span>
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={handleClearAll}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+                    confirmingClear
+                      ? 'bg-red-500/20 text-red-300 border-red-500/50'
+                      : 'bg-slate-900 hover:bg-red-500/20 text-slate-400 hover:text-red-300 border-slate-800 hover:border-red-500/30'
+                  }`}
+                  title={confirmingClear ? 'Nhấn lần nữa để xóa toàn bộ lịch sử' : 'Xóa toàn bộ lịch sử'}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span className={confirmingClear ? '' : 'hidden sm:inline'}>
+                    {confirmingClear ? `Xóa ${items.length} mục?` : 'Xóa Lịch Sử'}
+                  </span>
+                </button>
+
+                {confirmingClear && (
+                  <button
+                    onClick={() => setConfirmingClear(false)}
+                    className="px-3 py-2 bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 rounded-xl text-xs font-semibold transition-all"
+                  >
+                    Hủy
+                  </button>
+                )}
+              </div>
             )}
           </div>
 

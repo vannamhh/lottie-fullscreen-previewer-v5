@@ -20,6 +20,7 @@ import { LottieMetadata } from '../types';
 import { convertJsonToDotLottie, downloadFile, ConvertOptions } from '../utils/lottieConverter';
 import { optimizeLottieJson, LottieOptimizeOptions, OptimizationResult } from '../utils/lottieOptimizer';
 import { formatBytes, getUrlFileName, isJsonUrl } from '../utils/lottieParser';
+import { notify } from '../utils/notify';
 
 interface ConverterModalProps {
   isOpen: boolean;
@@ -127,7 +128,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
         setCurrentJson(json);
         setResult(null);
       } catch (err) {
-        alert('Tệp JSON không hợp lệ.');
+        notify('Tệp JSON không hợp lệ.');
       }
     };
     reader.readAsText(file);
@@ -136,7 +137,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
   // Convert JSON -> .lottie
   const handleConvert = async () => {
     if (!currentJson) {
-      alert('Vui lòng chọn hoặc tải lên một tệp Lottie JSON.');
+      notify('Vui lòng chọn hoặc tải lên một tệp Lottie JSON.');
       return;
     }
 
@@ -161,7 +162,7 @@ export const ConverterModal: React.FC<ConverterModalProps> = ({
       const res = await convertJsonToDotLottie(currentJson, options);
       setResult(res);
     } catch (err) {
-      alert('Lỗi khi chuyển đổi sang .lottie: ' + (err instanceof Error ? err.message : String(err)));
+      notify('Lỗi khi chuyển đổi sang .lottie: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsConverting(false);
     }
